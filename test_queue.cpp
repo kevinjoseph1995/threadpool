@@ -13,16 +13,20 @@ int main() {
   auto remove_element = [&my_queue, &mutex]() -> void {
     while (!my_queue.empty()) {
       auto ele = my_queue.try_pop();
+      std::lock_guard<std::mutex> lk(mutex);
       if (ele) {
-        std::lock_guard<std::mutex> lk(mutex);
-        std::cout << *ele << "\n";
+        std::cout << *ele << " ";
       }
     }
+    std::cout << "\n*\n";
+    using namespace std::literals::chrono_literals;
+    std::this_thread::sleep_for(10ms);
   };
   std::vector<std::future<void>> async_results;
-  for (int i = 0; i < 10; i++) {
-    if (i % 2 == 0) {
-      async_results.emplace_back(std::async(std::launch::async, add_element, i));
+  for (int i = 0; i < 100; i++) {
+    if (i % 2 == 0 || i % 3 == 0) {
+      async_results.emplace_back(
+          std::async(std::launch::async, add_element, i));
     } else {
       async_results.emplace_back(
           std::async(std::launch::async, remove_element));
