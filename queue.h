@@ -10,22 +10,6 @@
 #include <mutex>
 
 template <std::copy_constructible T> class queue {
-private:
-  struct node {
-    std::shared_ptr<T> data_;
-    std::unique_ptr<node> next_;
-  };
-  mutable std::mutex head_mutex_;
-  std::unique_ptr<node> head_ = nullptr;
-
-  mutable std::mutex tail_mutex_;
-  node *tail_ = nullptr;
-
-  [[nodiscard]] node *get_tail() const {
-    std::lock_guard<std::mutex> lk(std::mutex);
-    return tail_;
-  }
-
 public:
   // Initialize with dummy node at the beginning. The invariance that is
   // guaranteed at the end of every queue operation is that the "tail_" pointer
@@ -36,7 +20,7 @@ public:
 
   queue &operator=(const queue &other) = delete;
 
-  std::shared_ptr<T> try_pop() {
+  [[nodiscard]] std::unique_ptr<T> try_pop() {
     std::lock_guard<std::mutex> lk(head_mutex_);
     // Check if the current tail is the same as head.
     // In the scenario where there was a concurrent push call and head and tail
@@ -47,25 +31,55 @@ public:
     if (head_.get() == get_tail()) {
       return nullptr;
     } else {
-      auto const ret = head_->data_;
+      auto ret = std::move(head_->data_);
       head_ = std::move(head_->next_);
-      return ret;
+      return std::move(ret);
     }
+  }
+
+  [[nodiscard]] std::unique_ptr<T> wait_and_pop() {
+    std::unique_lock<std::mutex> lk(head_mutex_);
+    data_cv_.template wait(lk,
+                           [&]() -> bool { return head_.get() != get_tail(); });
+    auto ret = std::move(head_->data_);
+    head_ = std::move(head_->next_);
+    return std::move(ret);
   }
 
   void push(T value) {
     auto new_node = std::make_unique<node>();
     new_node->data_ = nullptr;
     auto *new_tail = new_node.get();
-    std::lock_guard<std::mutex> lk(tail_mutex_);
-    tail_->data_ = std::make_shared<T>(std::move(value));
-    tail_->next_ = std::move(new_node);
-    tail_ = new_tail;
+    {
+      std::lock_guard<std::mutex> lk(tail_mutex_);
+      tail_->data_ = std::make_unique<T>(std::move(value));
+      tail_->next_ = std::move(new_node);
+      tail_ = new_tail;
+    }
+    data_cv_.notify_one();
   }
 
   [[nodiscard]] bool empty() {
     std::lock_guard<std::mutex> lk(head_mutex_);
     return head_.get() == get_tail();
+  }
+
+private:
+  struct node {
+    std::unique_ptr<T> data_;
+    std::unique_ptr<node> next_;
+  };
+  mutable std::mutex head_mutex_;
+  std::unique_ptr<node> head_ = nullptr;
+
+  mutable std::mutex tail_mutex_;
+  node *tail_ = nullptr;
+  std::condition_variable data_cv_;
+
+private:
+  [[nodiscard]] node *get_tail() const {
+    std::lock_guard<std::mutex> lk(std::mutex);
+    return tail_;
   }
 };
 
