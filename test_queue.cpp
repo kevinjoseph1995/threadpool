@@ -1,34 +1,34 @@
 //
 // Created by kevin on 11/27/21.
 //
-#include <iostream>
 #include "queue.h"
+#include <future>
+#include <iostream>
+#include <vector>
 
 int main() {
-    queue<int> my_queue;
-    my_queue.push(5);
-    my_queue.push(6);
-    my_queue.push(7);
-    my_queue.push(8);
-    my_queue.push(9);
-    my_queue.push(10);
-    my_queue.push(11);
-
-
-    while (auto val = my_queue.try_pop()) {
-        std::cout << *val << "\n";
+  std::mutex mutex;
+  queue<int> my_queue;
+  auto add_element = [&my_queue](const int i) -> void { my_queue.push(i); };
+  auto remove_element = [&my_queue, &mutex]() -> void {
+    while (!my_queue.empty()) {
+      auto ele = my_queue.try_pop();
+      if (ele) {
+        std::lock_guard<std::mutex> lk(mutex);
+        std::cout << *ele << "\n";
+      }
     }
-
-    my_queue.push(5);
-    my_queue.push(6);
-    my_queue.push(7);
-    my_queue.push(8);
-    my_queue.push(9);
-    my_queue.push(10);
-    my_queue.push(11);
-
-
-    while (auto val = my_queue.try_pop()) {
-        std::cout << *val << "\n";
+  };
+  std::vector<std::future<void>> async_results;
+  for (int i = 0; i < 10; i++) {
+    if (i % 2 == 0) {
+      async_results.emplace_back(std::async(std::launch::async, add_element, i));
+    } else {
+      async_results.emplace_back(
+          std::async(std::launch::async, remove_element));
     }
+  }
+  for (auto &res : async_results) {
+    res.wait();
+  }
 }

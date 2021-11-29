@@ -13,3 +13,4 @@ add_link_options(-stdlib=libc++)
 #endif ()
 
 add_executable(test_queue test_queue.cpp)
+target_link_libraries(test_queue pthread)
