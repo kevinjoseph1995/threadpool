@@ -38,6 +38,12 @@ public:
 
   std::shared_ptr<T> try_pop() {
     std::lock_guard<std::mutex> lk(head_mutex_);
+    // Check if the current tail is the same as head.
+    // In the scenario where there was a concurrent push call and head and tail
+    // are the same, note that by using the get_tail helper that's protected by
+    // a mutex we get a tail that was ordered before or after the push. If it
+    // was before we try_pop -> fail and return. If it was ordered after the
+    // push we would pop_out that node or some other subsequently pushed node.
     if (head_.get() == get_tail()) {
       return nullptr;
     } else {
