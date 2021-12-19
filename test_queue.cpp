@@ -12,6 +12,7 @@ int main() {
   std::atomic<int> count;
   std::mutex mutex;
   queue<int> my_queue;
+  constexpr int kNumElements = 10;
   auto add_element = [&my_queue](const int i) -> void {
     std::this_thread::sleep_for(std::chrono::microseconds(rand() % 1000));
     my_queue.push(i);
@@ -24,11 +25,13 @@ int main() {
         count++;
         std::cout << "count:" << count << " value: " << *ele << "\n";
       }
+      if (count == kNumElements)
+        break;
     }
   };
   std::vector<std::future<void>> async_results;
-  async_results.reserve(1000);
-  for (int i = 0; i < 1000; i++) {
+  async_results.reserve(kNumElements);
+  for (int i = 0; i < kNumElements; i++) {
     async_results.emplace_back(std::async(std::launch::async, add_element, i));
   }
   auto pop_thread_future = std::async(std::launch::async, remove_element);
